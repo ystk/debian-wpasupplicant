@@ -1,0 +1,24 @@
+#!/bin/sh -e
+
+# Wrapper script to determine if user is a member of the netdev group or not
+# and exec wpa_gui with or without root privileges.
+#
+# Copyright: Copyright (c) 2008, Kel Modderman <kel@otaku42.de>
+# License:   GPL-2
+
+WPAGUI=/usr/sbin/wpa_gui
+
+if id -Gn | grep -q -w netdev; then
+	# caller is a member of the netdev group, if instructions in
+	# README.Debian were followed to setup wpa-roam they will find
+	# wpa_gui quite useful
+	exec $WPAGUI "$@"
+elif which su-to-root >/dev/null; then
+	# caller is not a member of netdev group, and thus most
+	# likely requires root for wpa_gui to be useful
+	exec su-to-root -X -c $WPAGUI "$@"
+else
+	# not a member of netdev group and not able to su-to-root, just
+	# exec it and hope for the best ...
+	exec $WPAGUI "$@"
+fi

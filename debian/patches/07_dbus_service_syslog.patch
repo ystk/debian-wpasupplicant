@@ -1,0 +1,10 @@
+Log wpa_supplicant messages to syslog.
+
+--- a/wpa_supplicant/dbus-wpa_supplicant.service
++++ b/wpa_supplicant/dbus-wpa_supplicant.service
+@@ -1,4 +1,4 @@
+ [D-BUS Service]
+ Name=fi.epitest.hostap.WPASupplicant
+-Exec=/sbin/wpa_supplicant -u
++Exec=/sbin/wpa_supplicant -u -s
+ User=root

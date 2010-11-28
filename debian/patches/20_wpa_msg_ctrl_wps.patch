@@ -1,0 +1,32 @@
+From: Jouni Malinen <j@w1.fi>
+Date: Sun, 27 Dec 2009 22:44:10 +0000 (+0200)
+Subject: Use wpa_msg_ctrl() for WPS AP available events
+X-Git-Tag: hostap_0_7_1~168
+X-Git-Url: http://w1.fi/gitweb/gitweb.cgi?p=hostap.git;a=commitdiff_plain;h=332d630a4422e99b3c7643f9dd9d9f0afb23fc8f
+
+Use wpa_msg_ctrl() for WPS AP available events
+
+No need to include these MSG_INFO level events in stdout/syslog,
+so deliver them only to ctrl_iface monitors.
+---
+
+--- a/wpa_supplicant/wps_supplicant.c
++++ b/wpa_supplicant/wps_supplicant.c
+@@ -904,11 +904,14 @@ void wpas_wps_notify_scan_results(struct
+ 		if (!ie)
+ 			continue;
+ 		if (wps_is_selected_pbc_registrar(ie))
+-			wpa_msg(wpa_s, MSG_INFO, WPS_EVENT_AP_AVAILABLE_PBC);
++			wpa_msg_ctrl(wpa_s, MSG_INFO,
++				     WPS_EVENT_AP_AVAILABLE_PBC);
+ 		else if (wps_is_selected_pin_registrar(ie))
+-			wpa_msg(wpa_s, MSG_INFO, WPS_EVENT_AP_AVAILABLE_PIN);
++			wpa_msg_ctrl(wpa_s, MSG_INFO,
++				     WPS_EVENT_AP_AVAILABLE_PIN);
+ 		else
+-			wpa_msg(wpa_s, MSG_INFO, WPS_EVENT_AP_AVAILABLE);
++			wpa_msg_ctrl(wpa_s, MSG_INFO,
++				     WPS_EVENT_AP_AVAILABLE);
+ 		wpabuf_free(ie);
+ 		break;
+ 	}

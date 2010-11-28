@@ -1,0 +1,10 @@
+01_use_pkg-config_for_pcsc-lite_module.patch
+02_dbus_group_policy.patch
+06_wpa_gui_menu_exec_path.patch
+07_dbus_service_syslog.patch
+11_syslog.patch
+18_wpa_gui_wps_ap_avail_annoyance.patch
+20_wpa_msg_ctrl_wps.patch
+21_kfreebsd.patch
+30_cfg80211_association_optimisation.patch
+31_fallback_to_full_EAP_authentication.patch

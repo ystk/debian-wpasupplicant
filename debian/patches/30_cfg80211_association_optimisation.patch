@@ -1,0 +1,124 @@
+commit 1fd851e121eb4bd6537cb8c6a018c3b81cddb0f7
+Author: Jouni Malinen <j@w1.fi>
+Date:   Tue Jan 12 20:01:09 2010 +0200
+
+    wext: Add cfg80211-specific optimization to avoid silly behavior
+    
+    If the driver is detected to use cfg80211, we can rely on it being able
+    to disconnect with SIOCSIWMLME commands and to use empty SSID as a way
+    to stop it from associating when we are in progress of configuring the
+    driver for association. Consequently, we can remove the hack that uses
+    random 32-octet SSID to force disconnection and re-order association
+    commands to match the expectations that cfg80211 has for WEXT ioctls.
+    This gets rid of extra scan rounds and attempts to associate with the
+    silly 32-octet SSID.
+    (cherry picked from commit 3145e6154c11355631b846b0dd2c57eead255401)
+
+diff --git a/src/drivers/driver_wext.c b/src/drivers/driver_wext.c
+index e771d37..10d2d5e 100644
+--- a/src/drivers/driver_wext.c
++++ b/src/drivers/driver_wext.c
+@@ -1,6 +1,6 @@
+ /*
+- * WPA Supplicant - driver interaction with generic Linux Wireless Extensions
+- * Copyright (c) 2003-2007, Jouni Malinen <j@w1.fi>
++ * Driver interaction with generic Linux Wireless Extensions
++ * Copyright (c) 2003-2010, Jouni Malinen <j@w1.fi>
+  *
+  * This program is free software; you can redistribute it and/or modify
+  * it under the terms of the GNU General Public License version 2 as
+@@ -20,6 +20,7 @@
+ 
+ #include "includes.h"
+ #include <sys/ioctl.h>
++#include <sys/stat.h>
+ #include <net/if_arp.h>
+ 
+ #include "wireless_copy.h"
+@@ -905,6 +906,8 @@ void * wpa_driver_wext_init(void *ctx, const char *ifname)
+ 	int s;
+ 	struct sockaddr_nl local;
+ 	struct wpa_driver_wext_data *drv;
++	char path[128];
++	struct stat buf;
+ 
+ 	drv = os_zalloc(sizeof(*drv));
+ 	if (drv == NULL)
+@@ -912,6 +915,12 @@ void * wpa_driver_wext_init(void *ctx, const char *ifname)
+ 	drv->ctx = ctx;
+ 	os_strlcpy(drv->ifname, ifname, sizeof(drv->ifname));
+ 
++	os_snprintf(path, sizeof(path), "/sys/class/net/%s/phy80211", ifname);
++	if (stat(path, &buf) == 0) {
++		wpa_printf(MSG_DEBUG, "WEXT: cfg80211-based driver detected");
++		drv->cfg80211 = 1;
++	}
++
+ 	drv->ioctl_sock = socket(PF_INET, SOCK_DGRAM, 0);
+ 	if (drv->ioctl_sock < 0) {
+ 		perror("socket(PF_INET,SOCK_DGRAM)");
+@@ -1929,6 +1938,19 @@ static void wpa_driver_wext_disconnect(struct wpa_driver_wext_data *drv)
+ 	}
+ 
+ 	if (iwr.u.mode == IW_MODE_INFRA) {
++		if (drv->cfg80211) {
++			/*
++			 * cfg80211 supports SIOCSIWMLME commands, so there is
++			 * no need for the random SSID hack, but clear the
++			 * BSSID and SSID.
++			 */
++			if (wpa_driver_wext_set_bssid(drv, null_bssid) < 0 ||
++			    wpa_driver_wext_set_ssid(drv, (u8 *) "", 0) < 0) {
++				wpa_printf(MSG_DEBUG, "WEXT: Failed to clear "
++					   "to disconnect");
++			}
++			return;
++		}
+ 		/*
+ 		 * Clear the BSSID selection and set a random SSID to make sure
+ 		 * the driver will not be trying to associate with something
+@@ -2076,6 +2098,14 @@ int wpa_driver_wext_associate(void *priv,
+ 
+ 	wpa_printf(MSG_DEBUG, "%s", __FUNCTION__);
+ 
++	if (drv->cfg80211) {
++		/*
++		 * Stop cfg80211 from trying to associate before we are done
++		 * with all parameters.
++		 */
++		wpa_driver_wext_set_ssid(drv, (u8 *) "", 0);
++	}
++
+ 	/*
+ 	 * If the driver did not support SIOCSIWAUTH, fallback to
+ 	 * SIOCSIWENCODE here.
+@@ -2155,11 +2185,15 @@ int wpa_driver_wext_associate(void *priv,
+ #endif /* CONFIG_IEEE80211W */
+ 	if (params->freq && wpa_driver_wext_set_freq(drv, params->freq) < 0)
+ 		ret = -1;
+-	if (wpa_driver_wext_set_ssid(drv, params->ssid, params->ssid_len) < 0)
++	if (!drv->cfg80211 &&
++	    wpa_driver_wext_set_ssid(drv, params->ssid, params->ssid_len) < 0)
+ 		ret = -1;
+ 	if (params->bssid &&
+ 	    wpa_driver_wext_set_bssid(drv, params->bssid) < 0)
+ 		ret = -1;
++	if (drv->cfg80211 &&
++	    wpa_driver_wext_set_ssid(drv, params->ssid, params->ssid_len) < 0)
++		ret = -1;
+ 
+ 	return ret;
+ }
+diff --git a/src/drivers/driver_wext.h b/src/drivers/driver_wext.h
+index b89c2cb..328f22e 100644
+--- a/src/drivers/driver_wext.h
++++ b/src/drivers/driver_wext.h
+@@ -43,6 +43,8 @@ struct wpa_driver_wext_data {
+ 	char mlmedev[IFNAMSIZ + 1];
+ 
+ 	int scan_complete_events;
++
++	int cfg80211; /* whether driver is using cfg80211 */
+ };
+ 
+ int wpa_driver_wext_get_ifflags(struct wpa_driver_wext_data *drv, int *flags);

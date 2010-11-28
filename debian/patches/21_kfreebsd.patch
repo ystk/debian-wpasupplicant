@@ -1,0 +1,143 @@
+Description: Fix FTBFS on kfreebsd-*
+Origin:      http://bugs.debian.org/cgi-bin/bugreport.cgi?msg=37;filename=wpasupplicant.diff;att=1;bug=480572
+             http://lists.shmoo.com/pipermail/hostap/2010-January/020935.html
+Bug-Debian:  http://bugs.debian.org/480572
+From:        Stefan Lippers-Hollmann <s.l-h@gmx.de>
+             Petr Salinger <Petr.Salinger@seznam.cz>
+
+--- a/src/drivers/driver_bsd.c
++++ b/src/drivers/driver_bsd.c
+@@ -29,9 +29,18 @@
+ #include <net/ethernet.h>
+ #endif
+ 
++#ifdef __GLIBC__
++#include <netinet/ether.h> 
++#include <bsd/string.h>
++
++#include <net80211/ieee80211.h>
++#include <net80211/ieee80211_ioctl.h>
++#include <net80211/ieee80211_crypto.h>
++#else
+ #include <net80211/ieee80211.h>
+ #include <net80211/ieee80211_crypto.h>
+ #include <net80211/ieee80211_ioctl.h>
++#endif
+ 
+ struct wpa_driver_bsd_data {
+ 	int	sock;			/* open socket for 802.11 ioctls */
+@@ -189,7 +198,11 @@ static int
+ wpa_driver_bsd_set_wpa_ie(struct wpa_driver_bsd_data *drv,
+ 	const u8 *wpa_ie, size_t wpa_ie_len)
+ {
++#ifdef IEEE80211_IOC_APPIE
++	return set80211var(drv, IEEE80211_IOC_APPIE, wpa_ie, wpa_ie_len);
++#else
+ 	return set80211var(drv, IEEE80211_IOC_OPTIE, wpa_ie, wpa_ie_len);
++#endif
+ }
+ 
+ static int
+@@ -449,7 +462,7 @@ wpa_driver_bsd_scan(void *priv, const u8
+ }
+ 
+ #include <net/route.h>
+-#if __FreeBSD__
++#if defined(__FreeBSD__) || defined(__FreeBSD_kernel__)
+ #include <net80211/ieee80211_freebsd.h>
+ #endif
+ #if __NetBSD__
+--- a/src/drivers/driver_wired.c
++++ b/src/drivers/driver_wired.c
+@@ -18,9 +18,9 @@
+ #ifdef __linux__
+ #include <netpacket/packet.h>
+ #endif /* __linux__ */
+-#if defined(__FreeBSD__) || defined(__DragonFly__)
++#if defined(__FreeBSD__) || defined(__DragonFly__) || defined(__FreeBSD_kernel__)
+ #include <net/if_dl.h>
+-#endif /* defined(__FreeBSD__) || defined(__DragonFly__) */
++#endif /* defined(__FreeBSD__) || defined(__DragonFly__) || defined(__FreeBSD_kernel__) */
+ 
+ #include "common.h"
+ #include "driver.h"
+@@ -118,7 +118,7 @@ static int wpa_driver_wired_multi(const
+ 	ifr.ifr_hwaddr.sa_family = AF_UNSPEC;
+ 	os_memcpy(ifr.ifr_hwaddr.sa_data, addr, ETH_ALEN);
+ #endif /* __linux__ */
+-#if defined(__FreeBSD__) || defined(__DragonFly__)
++#if defined(__FreeBSD__) || defined(__DragonFly__) || defined(__FreeBSD_kernel__)
+ 	{
+ 		struct sockaddr_dl *dlp;
+ 		dlp = (struct sockaddr_dl *) &ifr.ifr_addr;
+@@ -130,7 +130,7 @@ static int wpa_driver_wired_multi(const
+ 		dlp->sdl_slen = 0;
+ 		os_memcpy(LLADDR(dlp), addr, ETH_ALEN); 
+ 	}
+-#endif /* defined(__FreeBSD__) || defined(__DragonFly__) */
++#endif /* defined(__FreeBSD__) || defined(__DragonFly__) || defined(FreeBSD_kernel__) */
+ #if defined(__NetBSD__) || defined(__OpenBSD__) || defined(__APPLE__)
+ 	{
+ 		struct sockaddr *sap;
+--- a/src/l2_packet/l2_packet_freebsd.c
++++ b/src/l2_packet/l2_packet_freebsd.c
+@@ -14,7 +14,7 @@
+  */
+ 
+ #include "includes.h"
+-#ifdef __APPLE__
++#if defined(__APPLE__) || defined(__GLIBC__)
+ #include <net/bpf.h>
+ #endif /* __APPLE__ */
+ #include <pcap.h>
+--- a/src/utils/common.h
++++ b/src/utils/common.h
+@@ -17,7 +17,7 @@
+ 
+ #include "os.h"
+ 
+-#ifdef __linux__
++#if defined(__linux__) || defined(__GLIBC__)
+ #include <endian.h>
+ #include <byteswap.h>
+ #endif /* __linux__ */
+--- a/src/wps/wps_upnp.c
++++ b/src/wps/wps_upnp.c
+@@ -871,7 +871,7 @@ fail:
+ }
+ 
+ 
+-#ifdef __FreeBSD__
++#if defined(__FreeBSD__) || defined(__FreeBSD_kernel__)
+ #include <sys/sysctl.h>
+ #include <net/route.h>
+ #include <net/if_dl.h>
+@@ -961,7 +961,7 @@ static int get_netif_info(const char *ne
+ 		goto fail;
+ 	}
+ 	os_memcpy(mac, req.ifr_addr.sa_data, 6);
+-#elif defined(__FreeBSD__)
++#elif defined(__FreeBSD__) || defined(__FreeBSD_kernel__) 
+ 	if (eth_get(net_if, mac) < 0) {
+ 		wpa_printf(MSG_ERROR, "WPS UPnP: Failed to get MAC address");
+ 		goto fail;
+--- a/wpa_supplicant/ctrl_iface_unix.c
++++ b/wpa_supplicant/ctrl_iface_unix.c
+@@ -353,7 +353,7 @@ wpa_supplicant_ctrl_iface_init(struct wp
+ 	}
+ 
+ 	os_memset(&addr, 0, sizeof(addr));
+-#ifdef __FreeBSD__
++#if defined(__FreeBSD__) || defined(__FreeBSD_kernel__)
+ 	addr.sun_len = sizeof(addr);
+ #endif /* __FreeBSD__ */
+ 	addr.sun_family = AF_UNIX;
+@@ -657,7 +657,7 @@ wpa_supplicant_global_ctrl_iface_init(st
+ 	}
+ 
+ 	os_memset(&addr, 0, sizeof(addr));
+-#ifdef __FreeBSD__
++#if defined(__FreeBSD__) || defined(__FreeBSD_kernel__)
+ 	addr.sun_len = sizeof(addr);
+ #endif /* __FreeBSD__ */
+ 	addr.sun_family = AF_UNIX;

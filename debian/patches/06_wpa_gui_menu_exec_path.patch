@@ -1,0 +1,14 @@
+Debian specific patch to desktop meny entry, so that we may exec wpa_gui
+with best estimated privilege level via /usr/share/netdev_wrapper.
+---
+--- a/wpa_supplicant/wpa_gui-qt4/wpa_gui.desktop
++++ b/wpa_supplicant/wpa_gui-qt4/wpa_gui.desktop
+@@ -2,7 +2,7 @@
+ Version=1.0
+ Name=wpa_gui
+ Comment=Graphical user interface for wpa_supplicant
+-Exec=wpa_gui
++Exec=/usr/share/wpagui/netdev_wrapper
+ Icon=wpa_gui
+ GenericName=wpa_supplicant user interface
+ Terminal=false
