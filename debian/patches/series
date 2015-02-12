@@ -8,3 +8,4 @@
 21_kfreebsd.patch
 30_cfg80211_association_optimisation.patch
 31_fallback_to_full_EAP_authentication.patch
+CVE-2014-3686.patch
